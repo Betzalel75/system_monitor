@@ -59,6 +59,9 @@ fn main() {
     let mut temp_graph = GraphData::new(100, Duration::from_millis(100));
     let mut network = Network::new();
     network.initialize();
+    let mut show_ip = false;
+    let mut show_rx_bar = false;
+    let mut show_tx_bar = false;
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -212,50 +215,131 @@ fn main() {
             .position([10.0, 390.0], Condition::FirstUseEver)
             .build(|| {
                 // Code pour la fenêtre Réseau
+                if ui.button("IP-Address"){
+                    show_ip = !show_ip;
+                }
+                if show_ip {
+                    ui.separator();
+                    ui.columns(2, "IP-Address", true);
+                    ui.text("Interface");
+                    ui.next_column();
+                    ui.text("IP");
+                    ui.next_column();
+                    ui.separator();
+                    for interface in &network.interfaces {
+                        ui.text(format!("{}", interface.name));
+                        ui.next_column();
+                        ui.text(format!("{}", interface.ip));
+                        ui.next_column();
+                        ui.separator();
+                    }
+                    ui.columns(1, "", true);
+                }
+                ui.text("\n");
                 if let Some(tab_bar) = ui.tab_bar("Network") {
                     if let Some(rx_tab) = ui.tab_item("RX") {
+                        // En-têtes du tableau RX
+                        ui.separator();
+                        ui.columns(9, "RXColumns", true);
+                        ui.text("Interface");
+                        ui.next_column();
+                        ui.text("Bytes");
+                        ui.next_column();
+                        ui.text("Packets");
+                        ui.next_column();
+                        ui.text("Errs");
+                        ui.next_column();
+                        ui.text("Drop");
+                        ui.next_column();
+                        ui.text("Fifo");
+                        ui.next_column();
+                        ui.text("Frame");
+                        ui.next_column();
+                        ui.text("Compressed");
+                        ui.next_column();
+                        ui.text("Multicast");
+                        ui.next_column();
+                        ui.separator();
                         for interface in &network.interfaces {
                             if let Some(rx_stats) = &interface.rx_stats {
-                                ui.text(format!("Interface: {}", interface.name));
-                                ui.text(format!("IP: {}", interface.ip));
-                                ui.text(format!(
-                                    "Total Received: {}",
-                                    convert_bytes_to_any(interface.total_received)
-                                ));
-                                ui.text(format!("Packets: {}", rx_stats.packets));
-                                ui.text(format!("Errors: {}", rx_stats.errs));
-                                ui.text(format!("Dropped: {}", rx_stats.drop));
-                                ui.text(format!("FIFO: {}", rx_stats.fifo));
-                                ui.text(format!("Frame: {}", rx_stats.frame));
-                                ui.text(format!("Compressed: {}", rx_stats.compressed));
-                                ui.text(format!("Multicast: {}", rx_stats.multicast));
+                                ui.text(format!("{}", interface.name));
+                                ui.next_column();
+                                ui.text(format!("{}",interface.total_received));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.packets));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.errs));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.drop));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.fifo));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.frame));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.compressed));
+                                ui.next_column();
+                                ui.text(format!("{}", rx_stats.multicast));
+                                ui.next_column();
+                                ui.separator();
                             }
                         }
+                        ui.columns(1, "", true);
                         rx_tab.end();
                     }
 
                     if let Some(tx_tab) = ui.tab_item("TX") {
+                        // En-têtes du tableau TX
+                        ui.separator();
+                        ui.columns(9, "TXColumns", true);
+                        ui.text("Interface");
+                        ui.next_column();
+                        ui.text("Bytes");
+                        ui.next_column();
+                        ui.text("Packets");
+                        ui.next_column();
+                        ui.text("Errs");
+                        ui.next_column();
+                        ui.text("Drop");
+                        ui.next_column();
+                        ui.text("Fifo");
+                        ui.next_column();
+                        ui.text("Colls");
+                        ui.next_column();
+                        ui.text("Compressed");
+                        ui.next_column();
+                        ui.text("Carrier");
+                        ui.next_column();
+                        ui.separator();
                         for interface in &network.interfaces {
                             if let Some(tx_stats) = &interface.tx_stats {
-                                ui.text(format!("Interface: {}", interface.name));
-                                ui.text(format!("IP: {}", interface.ip));
-                                ui.text(format!(
-                                    "Total Transmitted: {}",
-                                    convert_bytes_to_any(interface.total_transmitted)
-                                ));
-                                ui.text(format!("Packets: {}", tx_stats.packets));
-                                ui.text(format!("Errors: {}", tx_stats.errs));
-                                ui.text(format!("Dropped: {}", tx_stats.drop));
-                                ui.text(format!("FIFO: {}", tx_stats.fifo));
-                                ui.text(format!("Collisions: {}", tx_stats.colls));
-                                ui.text(format!("Carrier: {}", tx_stats.carrier));
-                                ui.text(format!("Compressed: {}", tx_stats.compressed));
+                                ui.text(format!("{}", interface.name));
+                                ui.next_column();
+                                ui.text(format!("{}",interface.total_transmitted));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.packets));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.errs));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.drop));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.fifo));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.colls));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.carrier));
+                                ui.next_column();
+                                ui.text(format!("{}", tx_stats.compressed));
+                                ui.next_column();
+                                ui.separator();
                             }
                         }
+                        ui.columns(1, "", true);
                         tx_tab.end();
                     }
                     tab_bar.end();
                 }
+                // Barres de Progressions
+                network_prog(ui, &mut show_rx_bar,&mut show_tx_bar, &network);
             });
 
         platform.prepare_render(&ui, &window);
@@ -273,3 +357,180 @@ fn main() {
         window.gl_swap_window();
     }
 }
+
+/*
+fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
+    const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
+
+    // Fonction pour déterminer la couleur de la barre de progression
+    fn get_color(value: f32) -> [f32; 4] {
+        if value <= MAX / 2.0 {
+            [0.0, 1.0, 0.0, 1.0] // Vert
+        } else if value > MAX / 2.0 && value <= MAX * 2.0 / 3.0 {
+            [1.0, 1.0, 0.0, 1.0] // Jaune
+        } else {
+            [1.0, 0.0, 0.0, 1.0] // Rouge
+        }
+    }
+
+    ui.text("\n");
+    if ui.button("Network-Receiver") {
+        *show_rx_bar = !*show_rx_bar;
+        *show_tx_bar = false;
+    }
+
+    ui.same_line_with_pos(150.0); // Alignez le bouton suivant sur la même ligne
+    if ui.button("Network-Transmitter") {
+        *show_tx_bar = !*show_tx_bar;
+        *show_rx_bar = false;
+    }
+
+    ui.separator();
+    
+    if *show_rx_bar {
+        for stat in &stats.interfaces {
+            let rx: f32 = stat.total_received as f32 / MAX;
+            let _color = get_color(stat.total_received as f32);
+            ui.text(&stat.name);
+            ProgressBar::new(rx)
+                .size([300.0, 24.0])
+                .overlay_text(format!("{}",
+                    convert_bytes_to_any(stat.total_received)
+                ))
+                .build(&ui);
+            let label = format!(" {}", convert_bytes_to_any(MAX as u64));
+            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+            ui.text(&label);
+            ui.text("\n");
+        }
+    }
+
+    if *show_tx_bar {
+        for stat in &stats.interfaces {
+            let tx = stat.total_transmitted as f32 / MAX;
+            ui.text(&stat.name);
+            ProgressBar::new(tx)
+                .size([300.0, 24.0])
+                .overlay_text(format!("{}",
+                    convert_bytes_to_any(stat.total_transmitted)
+                ))
+                .build(&ui);
+            let label = format!(" {}", convert_bytes_to_any(MAX as u64));
+            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+            ui.text(&label);
+            ui.text("\n");
+        }
+    }
+}
+*/
+
+fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
+    const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
+
+    fn get_color(value: f32) -> [f32; 4] {
+        if value <= MAX / 2.0 {
+            [0.0, 1.0, 0.0, 1.0] // Vert
+        } else if value > MAX / 2.0 && value <= MAX * 2.0 / 3.0 {
+            [1.0, 1.0, 0.0, 1.0] // Jaune
+        } else {
+            [1.0, 0.0, 0.0, 1.0] // Rouge
+        }
+    }
+
+    ui.text("\n");
+    if ui.button("Network-Receiver") {
+        *show_rx_bar = !*show_rx_bar;
+        *show_tx_bar = false;
+    }
+
+    ui.same_line_with_pos(150.0); // Alignez le bouton suivant sur la même ligne
+    if ui.button("Network-Transmitter") {
+        *show_tx_bar = !*show_tx_bar;
+        *show_rx_bar = false;
+    }
+
+    ui.separator();
+
+    if *show_rx_bar {
+        for stat in &stats.interfaces {
+            let rx = stat.total_received as f32 / MAX;
+            let color = get_color(stat.total_received as f32);
+            let (r,g,b) = (color[0] , color[1] , color[2]);
+            ui.text(&stat.name);
+
+            // Dessiner la barre de progression
+            let draw_list = ui.get_window_draw_list();
+            let pos = ui.cursor_screen_pos();
+            let size = [300.0, 24.0];
+            let mut fill_end = pos[0] + size[0] * rx;
+
+            // Dessiner la barre de fond (blanche)
+            draw_list.add_rect(
+                pos,
+                [pos[0] + size[0], pos[1] + size[1]],
+                ImColor32::WHITE,
+            ).build();
+
+            // Dessiner la barre remplie
+            if fill_end > size[0] {
+                fill_end = pos[0] + size[0];
+            }
+            if rx > 0.0 {
+                draw_list.add_rect(
+                    pos,
+                    [fill_end, pos[1] + size[1]],
+                    ImColor32::from_rgb_f32s(r, g, b),
+                ).build();
+            }
+            ui.invisible_button("progress_bar", size);
+
+            let label = format!("{}",
+                convert_bytes_to_any(MAX as u64)
+            );
+            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+            ui.text(&label);
+            ui.text("\n");
+        }
+    }
+
+    if *show_tx_bar {
+        for stat in &stats.interfaces {
+            let tx = stat.total_transmitted as f32 / MAX;
+            let color = get_color(stat.total_transmitted as f32);
+            let (r,g,b) = (color[0] , color[1] , color[2]);
+            ui.text(&stat.name);
+
+            // Dessiner la barre de progression
+            let draw_list = ui.get_window_draw_list();
+            let pos = ui.cursor_screen_pos();
+            let size = [300.0, 24.0];
+            let fill_end = pos[0] + size[0] * tx;
+
+            // Dessiner la barre de fond (blanche)
+            draw_list.add_rect(
+                pos,
+                [pos[0] + size[0], pos[1] + size[1]],
+                ImColor32::WHITE,
+            ).build();
+
+            // Dessiner la barre remplie
+            if tx > 0.0 {
+                draw_list.add_rect(
+                    pos,
+                    [fill_end, pos[1] + size[1]],
+                    ImColor32::from_rgb_f32s(r, g, b),
+                ).build();
+            }
+
+            ui.invisible_button("progress_bar", size);
+
+            let label = format!("{}",
+                convert_bytes_to_any(MAX as u64)
+            );
+            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+            ui.text(&label);
+            ui.text("\n");
+        }
+    }
+}
+

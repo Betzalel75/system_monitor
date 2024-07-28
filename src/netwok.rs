@@ -60,7 +60,7 @@ pub mod network {
                 interfaces: Vec::new(),
             }
         }
-        
+
         pub fn initialize(&mut self) {
             // Obtenir la liste des interfaces réseau
             let networks = Networks::new_with_refreshed_list();
@@ -68,7 +68,8 @@ pub mod network {
             for (interface_name, data) in &networks {
                 let ip = Ipv4Addr::new(0, 0, 0, 0); // Placeholder, update with actual IP later
                 let name = interface_name.clone();
-                let mut interface = Interface::new(name, ip, data.total_received(), data.total_transmitted());
+                let mut interface =
+                    Interface::new(name, ip, data.total_received(), data.total_transmitted());
 
                 interface.rx_stats = Some(RxStats {
                     bytes: data.received(),
@@ -111,5 +112,20 @@ pub mod network {
             }
         }
 
+        pub fn get_max_received(&self) -> u64 {
+            self.interfaces
+                .iter()
+                .map(|i| i.total_received)
+                .max()
+                .unwrap_or(1)
+        }
+
+        pub fn get_max_transmitted(&self) -> u64 {
+            self.interfaces
+                .iter()
+                .map(|i| i.total_transmitted)
+                .max()
+                .unwrap_or(1)
+        }
     }
 }
