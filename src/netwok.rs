@@ -1,6 +1,9 @@
 pub mod network {
+    use imgui::{ImColor32, Ui};
     use std::net::Ipv4Addr;
     use sysinfo::Networks;
+
+    use crate::convert_bytes_to_any;
     extern crate pnet;
 
     pub struct RxStats {
@@ -126,6 +129,112 @@ pub mod network {
                 .map(|i| i.total_transmitted)
                 .max()
                 .unwrap_or(1)
+        }
+    }
+
+    pub fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
+        const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
+
+        fn get_color(value: f32) -> [f32; 4] {
+            if value <= MAX / 2.0 {
+                [0.0, 1.0, 0.0, 1.0] // Vert
+            } else if value > MAX / 2.0 && value <= MAX * 2.0 / 3.0 {
+                [1.0, 1.0, 0.0, 1.0] // Jaune
+            } else {
+                [1.0, 0.0, 0.0, 1.0] // Rouge
+            }
+        }
+
+        ui.text("\n");
+        if ui.button("Network-Receiver") {
+            *show_rx_bar = !*show_rx_bar;
+            *show_tx_bar = false;
+        }
+
+        ui.same_line_with_pos(150.0); // Alignez le bouton suivant sur la même ligne
+        if ui.button("Network-Transmitter") {
+            *show_tx_bar = !*show_tx_bar;
+            *show_rx_bar = false;
+        }
+
+        ui.separator();
+
+        if *show_rx_bar {
+            for stat in &stats.interfaces {
+                let rx = stat.total_received as f32 / MAX;
+                let color = get_color(stat.total_received as f32);
+                let (r, g, b) = (color[0], color[1], color[2]);
+                ui.text(&stat.name);
+
+                // Dessiner la barre de progression
+                let draw_list = ui.get_window_draw_list();
+                let pos = ui.cursor_screen_pos();
+                let size = [300.0, 24.0];
+                let mut fill_end = pos[0] + size[0] * rx;
+
+                // Dessiner la barre de fond (blanche)
+                draw_list
+                    .add_rect(pos, [pos[0] + size[0], pos[1] + size[1]], ImColor32::WHITE)
+                    .build();
+
+                // Dessiner la barre remplie
+                if fill_end > size[0] {
+                    fill_end = pos[0] + size[0];
+                }
+                if rx > 0.0 {
+                    draw_list
+                        .add_rect(
+                            pos,
+                            [fill_end, pos[1] + size[1]],
+                            ImColor32::from_rgb_f32s(r, g, b),
+                        )
+                        .build();
+                }
+                ui.invisible_button("progress_bar", size);
+
+                let label = format!("{}", convert_bytes_to_any(MAX as u64));
+                ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+                ui.text(&label);
+                ui.text("\n");
+            }
+        }
+
+        if *show_tx_bar {
+            for stat in &stats.interfaces {
+                let tx = stat.total_transmitted as f32 / MAX;
+                let color = get_color(stat.total_transmitted as f32);
+                let (r, g, b) = (color[0], color[1], color[2]);
+                ui.text(&stat.name);
+
+                // Dessiner la barre de progression
+                let draw_list = ui.get_window_draw_list();
+                let pos = ui.cursor_screen_pos();
+                let size = [300.0, 24.0];
+                let fill_end = pos[0] + size[0] * tx;
+
+                // Dessiner la barre de fond (blanche)
+                draw_list
+                    .add_rect(pos, [pos[0] + size[0], pos[1] + size[1]], ImColor32::WHITE)
+                    .build();
+
+                // Dessiner la barre remplie
+                if tx > 0.0 {
+                    draw_list
+                        .add_rect(
+                            pos,
+                            [fill_end, pos[1] + size[1]],
+                            ImColor32::from_rgb_f32s(r, g, b),
+                        )
+                        .build();
+                }
+
+                ui.invisible_button("progress_bar", size);
+
+                let label = format!("{}", convert_bytes_to_any(MAX as u64));
+                ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
+                ui.text(&label);
+                ui.text("\n");
+            }
         }
     }
 }

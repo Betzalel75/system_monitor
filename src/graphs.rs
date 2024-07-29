@@ -1,12 +1,13 @@
 pub mod graph {
     use imgui::Ui;
     use std::str::FromStr;
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
     use std::{io, process::Command};
     use sysinfo::{Components, System};
+    use tokio::time::interval;
 
     pub struct Cpu {
-        pub cpu_percent: f32,
         pub temperatures: f32,
         pub fan_info: usize,
     }
@@ -23,7 +24,6 @@ pub mod graph {
     impl Cpu {
         pub fn new() -> Cpu {
             Self {
-                cpu_percent: 0.0,
                 temperatures: 0.0,
                 fan_info: 0,
             }
@@ -81,11 +81,11 @@ pub mod graph {
                     }
 
                     // Vérifiez l'état du ventilateur (on/off)
-                    if line.contains("fan:  on") {
-                        fan_info.state = Some(String::from("On"));
-                    } else if line.contains("fan:  off") {
-                        fan_info.state = Some(String::from("Off"));
-                    }
+                    fan_info.state = Some(if fan_info.rpm.unwrap() > 0 {
+                        "On".to_string()
+                    } else {
+                        "Off".to_string()
+                    });
 
                     fan_info_list.push(fan_info);
                 }
@@ -104,7 +104,7 @@ pub mod graph {
     }
 
     pub struct GraphData {
-        pub data: Vec<f32>,
+        pub data: Arc<Mutex<Vec<f32>>>,
         pub max_points: usize,
         pub update_interval: Duration,
         pub last_update: Instant,
@@ -116,61 +116,93 @@ pub mod graph {
     impl GraphData {
         pub fn new(max_points: usize, update_interval: Duration) -> Self {
             Self {
-                data: Vec::with_capacity(max_points),
+                data: Arc::new(Mutex::new(Vec::with_capacity(max_points))),
                 max_points,
                 update_interval,
                 last_update: Instant::now(),
                 is_paused: false,
-                fps: 10.0,
+                fps: 1.0,
                 y_scale: 1.0,
             }
         }
 
         pub fn update(&mut self, new_value: f32) {
-            if !self.is_paused && self.last_update.elapsed() >= self.update_interval {
-                if self.data.len() == self.max_points {
-                    self.data.remove(0);
+            if !self.is_paused {
+                let mut data = self.data.lock().unwrap();
+                data.push(new_value);
+                if data.len() >= self.max_points {
+                    data.remove(0);
                 }
-                self.data.push(new_value);
-                self.last_update = Instant::now();
             }
         }
         // Votre fonction pour tracer les graphiques
         pub fn draw_graph(&self, ui: &Ui, label: &str, hover: &str) {
-            let (min, max) = self
-                .data
-                .iter()
-                .fold((f32::MAX, f32::MIN), |(min, max), &val| {
-                    (min.min(val), max.max(val))
-                });
+            let data = self.data.lock().unwrap();
+            let (min, max) = data.iter().fold((f32::MAX, f32::MIN), |(min, max), &val| {
+                (min.min(val), max.max(val))
+            });
+            let last_value = data.last().unwrap_or(&0.0);
+            let last_value_str = format!("{:.2}", last_value);
+            let overlay_text = hover.replace('#', &last_value_str);
 
-            ui.plot_lines(label, &self.data)
+            ui.plot_lines(label, &data)
                 .graph_size([500.0, 100.0])
                 .scale_min(min)
                 .scale_max(max * self.y_scale)
-                .overlay_text(hover)
+                .overlay_text(overlay_text)
                 .build();
         }
     }
-}
 
-/*
-pub fn print_all_info(){
+    pub async fn update_cpu_graph(graph_data: Arc<Mutex<GraphData>>) {
+        if graph_data.lock().unwrap().is_paused {
+            println!("update_cpu_graph called");
+            return;
+        }
+        let mut interval = interval(Duration::from_secs_f32(
+            1.0 / graph_data.lock().unwrap().fps,
+        ));
+        loop {
+            interval.tick().await;
             let cpu_usage = Cpu::get_cpu_usage();
-            let cpu_temp = Cpu::get_cpu_temperatures();
-            let fan_info_list = Cpu::get_all_fan_info().unwrap_or(Vec::new());
-
-            println!("CPU Usage: {:.2}%", cpu_usage);
-            println!("CPU Temperature: {:.2}°C", cpu_temp);
-            println!("Fan Information:");
-            for fan_info in fan_info_list {
-                println!(
-                    "RPM: {}, Min RPM: {}, Max RPM: {}, State: {}",
-                    fan_info.rpm.unwrap_or(0),
-                    fan_info.min_rpm.unwrap_or(0),
-                    fan_info.max_rpm.unwrap_or(0),
-                    fan_info.state.unwrap_or(String::from("Unknown"))
-                );
+            {
+                let mut graph = graph_data.lock().unwrap();
+                graph.update(cpu_usage);
             }
         }
-*/
+    }
+    pub async fn update_fan_graph(graph_data: Arc<Mutex<GraphData>>) {
+        if graph_data.lock().unwrap().is_paused {
+            println!("update_fan_graph called");
+            return;
+        }
+        let mut interval = interval(Duration::from_secs_f32(
+            1.0 / graph_data.lock().unwrap().fps,
+        ));
+        loop {
+            interval.tick().await;
+            let fan_info_list = Cpu::get_all_fan_info().unwrap();
+            {
+                let mut graph = graph_data.lock().unwrap();
+                graph.update(fan_info_list[0].rpm.unwrap_or(0) as f32);
+            }
+        }
+    }
+    pub async fn update_temperature_graph(graph_data: Arc<Mutex<GraphData>>) {
+        if graph_data.lock().unwrap().is_paused {
+            println!("update_temperature_graph called");
+            return;
+        }
+        let mut interval = interval(Duration::from_secs_f32(
+            1.0 / graph_data.lock().unwrap().fps,
+        ));
+        loop {
+            interval.tick().await;
+            let cpu_temperature = Cpu::get_cpu_temperatures();
+            {
+                let mut graph = graph_data.lock().unwrap();
+                graph.update(cpu_temperature);
+            }
+        }
+    }
+}

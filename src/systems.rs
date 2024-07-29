@@ -1,4 +1,6 @@
 pub mod system {
+    use std::{fs::File, io::{BufRead, BufReader}};
+
     use sysinfo::System;
     use users::{get_current_uid, get_user_by_uid};
 
@@ -30,9 +32,8 @@ pub mod system {
             self.cpu_core_count = sys.cpus().len();
             self.cpu_info = sys.cpus()[0].brand().to_string();
             self.os_info = format!(
-                "{} {}",
-                System::name().unwrap(),
-                System::os_version().unwrap()
+                "{}",
+                get_os_info()
             );
             self.hostname = System::host_name().unwrap().to_string();
             self.username = Self::get_user_name();
@@ -43,5 +44,23 @@ pub mod system {
                 None => "N/A".to_string(),
             }
         }
+    }
+    fn get_os_info() -> String {
+        let file = File::open("/etc/os-release");
+        if let Ok(file) = file {
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    if line.contains("PRETTY_NAME") {
+                        let parts: Vec<&str> = line.split('=').collect();
+                        if parts.len() > 1 {
+                            let os_info = parts[1].trim_start_matches('"').trim_end_matches('"').to_string();
+                            return os_info;
+                        }
+                    }
+                }
+            }
+        }
+        "N/A".to_string()
     }
 }

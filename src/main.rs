@@ -4,8 +4,12 @@ extern crate imgui_opengl_renderer;
 extern crate imgui_sdl2;
 extern crate sdl2;
 
-use std::time::Duration;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+// use tokio::time::interval;
 
+use graphs::graph;
 use imgui::*;
 use imgui_opengl_renderer::Renderer;
 use imgui_sdl2::ImguiSdl2;
@@ -13,9 +17,11 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::video::GLProfile;
 
+use sysinfo::System;
 use system_monitor::*;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Initialize SDL
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -52,11 +58,44 @@ fn main() {
 
     let clear_color = [0.0, 0.0, 0.0, 1.0];
 
-    //
+    // Créez des instances de GraphData pour chaque type de graphique
+    let cpu_graph = Arc::new(Mutex::new(graph::GraphData::new(
+        100,
+        Duration::from_secs_f32(1.0),
+    )));
+    let fan_graph = Arc::new(Mutex::new(graph::GraphData::new(
+        100,
+        Duration::from_secs_f32(1.0),
+    )));
+    let temp_graph = Arc::new(Mutex::new(graph::GraphData::new(
+        100,
+        Duration::from_secs_f32(1.0),
+    )));
 
-    let mut cpu_graph = GraphData::new(100, Duration::from_millis(100));
-    let mut fan_graph = GraphData::new(100, Duration::from_millis(100));
-    let mut temp_graph = GraphData::new(100, Duration::from_millis(100));
+    let system = Arc::new(Mutex::new(System::new_all()));
+    let mut selected_pids = HashSet::new();
+    let system_clone = system.clone();
+    tokio::spawn(async move {
+        loop {
+            {
+                let mut sys = system_clone.lock().unwrap();
+                sys.refresh_processes();
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+
+    // Lancer les mises à jour des graphiques dans une tâche asynchrone
+    // tokio::spawn(start_updating_graphs(
+    //     cpu_graph.clone(),
+    //     fan_graph.clone(),
+    //     temp_graph.clone(),
+    // ));
+
+    // tokio::spawn(update_cpu_graph(cpu_graph.clone()));
+    // tokio::spawn(update_fan_graph(fan_graph.clone()));
+    // tokio::spawn(update_temperature_graph(temp_graph.clone()));
+
     let mut network = Network::new();
     network.initialize();
     let mut show_ip = false;
@@ -83,10 +122,6 @@ fn main() {
 
         platform.prepare_frame(imgui.io_mut(), &window, &event_pump.mouse_state());
         let ui = imgui.frame();
-
-        // Mettez à jour les données du graphique ici
-        cpu_graph.update(Cpu::get_cpu_usage());
-        temp_graph.update(Cpu::get_cpu_temperatures());
 
         ui.window("== Mémoire et processus ==")
             .size([620.0, 370.0], Condition::FirstUseEver)
@@ -139,6 +174,11 @@ fn main() {
                     .build(&ui);
                 ui.text("\n");
                 ui.separator();
+                // Table des Processuses
+                ui.text("\n");
+                let binding = system.clone();
+                let mut system = binding.lock().unwrap();
+                draw_process_table(ui, &mut system, &mut selected_pids);
             });
 
         ui.window("== Système ==")
@@ -160,10 +200,21 @@ fn main() {
                     .position([10.0, 140.0], Condition::FirstUseEver)
                     .build(|| {
                         // Code pour la fenêtre Graphics
+                        // Appeler adjust_intervals chaque fois que le FPS est modifié
+                        adjust_intervals(cpu_graph.clone(), fan_graph.clone(), temp_graph.clone());
+
                         if let Some(tab_bar) = ui.tab_bar("Performance Tabs") {
                             if let Some(tab) = ui.tab_item("CPU") {
-                                let hover = format!("CPU Usage: {:.2}%", Cpu::get_cpu_usage());
-                                // ui.text(&hover);
+                                let binding = cpu_graph.clone();
+                                let mut cpu_graph = binding.lock().unwrap();
+                                if !cpu_graph.is_paused && cpu_graph.last_update.elapsed() >= cpu_graph.update_interval {
+                                    let cpu_usage = Cpu::get_cpu_usage();
+                                    cpu_graph.last_update = Instant::now();
+                                    {
+                                        cpu_graph.update(cpu_usage);
+                                    }
+                                }
+                                let hover = format!("CPU Usage: #%");
                                 ui.checkbox("Pause Animation", &mut cpu_graph.is_paused);
                                 ui.slider("FPS", 1.0, 60.0, &mut cpu_graph.fps);
                                 ui.slider("Y Scale", 1.0, 10.0, &mut cpu_graph.y_scale);
@@ -172,19 +223,19 @@ fn main() {
                             }
 
                             if let Some(tab) = ui.tab_item("Fan") {
-                                let fan_info = Cpu::get_all_fan_info().unwrap_or_default();
-                                let mut hover = String::new();
-                                for fan in fan_info {
-                                    fan_graph.update(fan.rpm.unwrap_or(0) as f32);
-                                    hover = format!("RPM: {}", fan.rpm.unwrap_or(0));
-                                    // ui.text(format!(
-                                    //     "RPM: {}, Min RPM: {}, Max RPM: {}, State: {}",
-                                    //     fan.rpm.unwrap_or(0),
-                                    //     fan.min_rpm.unwrap_or(0),
-                                    //     fan.max_rpm.unwrap_or(0),
-                                    //     fan.state.unwrap_or("Unknown".to_string())
-                                    // ));
+                                let hover: &str = "RPM: #";
+                                let binding = fan_graph.clone();
+                                let mut fan_graph = binding.lock().unwrap();
+                                if !fan_graph.is_paused
+                                    && fan_graph.last_update.elapsed() >= fan_graph.update_interval
+                                {
+                                    let fan_info_list = Cpu::get_all_fan_info().unwrap();
+                                    fan_graph.last_update = Instant::now();
+                                    {
+                                        fan_graph.update(fan_info_list[0].rpm.unwrap_or(0) as f32);
+                                    }
                                 }
+
                                 ui.checkbox("Pause Animation", &mut fan_graph.is_paused);
                                 ui.slider("FPS", 1.0, 60.0, &mut fan_graph.fps);
                                 ui.slider("Y Scale", 1.0, 10.0, &mut fan_graph.y_scale);
@@ -193,11 +244,22 @@ fn main() {
                             }
 
                             if let Some(tab) = ui.tab_item("Thermal") {
-                                let hover = format!(
-                                    "CPU Temperature: {:.2}°C",
-                                    Cpu::get_cpu_temperatures()
-                                );
-                                // ui.text(&hover);
+                                let binding = temp_graph.clone();
+                                let mut temp_graph = binding.lock().unwrap();
+
+                                if !temp_graph.is_paused
+                                    && temp_graph.last_update.elapsed()
+                                        >= temp_graph.update_interval
+                                {
+                                    let cpu_temperature = Cpu::get_cpu_temperatures();
+                                    temp_graph.last_update = Instant::now();
+                                    {
+                                        temp_graph.update(cpu_temperature);
+                                    }
+                                }
+
+                                let hover = format!("CPU Temperature: #°C",);
+
                                 ui.checkbox("Pause Animation", &mut temp_graph.is_paused);
                                 ui.slider("FPS", 1.0, 60.0, &mut temp_graph.fps);
                                 ui.slider("Y Scale", 1.0, 10.0, &mut temp_graph.y_scale);
@@ -215,7 +277,7 @@ fn main() {
             .position([10.0, 390.0], Condition::FirstUseEver)
             .build(|| {
                 // Code pour la fenêtre Réseau
-                if ui.button("IP-Address"){
+                if ui.button("IP-Address") {
                     show_ip = !show_ip;
                 }
                 if show_ip {
@@ -264,7 +326,7 @@ fn main() {
                             if let Some(rx_stats) = &interface.rx_stats {
                                 ui.text(format!("{}", interface.name));
                                 ui.next_column();
-                                ui.text(format!("{}",interface.total_received));
+                                ui.text(format!("{}", interface.total_received));
                                 ui.next_column();
                                 ui.text(format!("{}", rx_stats.packets));
                                 ui.next_column();
@@ -314,7 +376,7 @@ fn main() {
                             if let Some(tx_stats) = &interface.tx_stats {
                                 ui.text(format!("{}", interface.name));
                                 ui.next_column();
-                                ui.text(format!("{}",interface.total_transmitted));
+                                ui.text(format!("{}", interface.total_transmitted));
                                 ui.next_column();
                                 ui.text(format!("{}", tx_stats.packets));
                                 ui.next_column();
@@ -339,7 +401,7 @@ fn main() {
                     tab_bar.end();
                 }
                 // Barres de Progressions
-                network_prog(ui, &mut show_rx_bar,&mut show_tx_bar, &network);
+                network_prog(ui, &mut show_rx_bar, &mut show_tx_bar, &network);
             });
 
         platform.prepare_render(&ui, &window);
@@ -358,179 +420,47 @@ fn main() {
     }
 }
 
-/*
-fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
-    const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
+// Fonction pour lancer les mises à jour asynchrones
+// async fn start_updating_graphs(
+//     cpu_graph: Arc<Mutex<graph::GraphData>>,
+//     fan_graph: Arc<Mutex<graph::GraphData>>,
+//     temp_graph: Arc<Mutex<graph::GraphData>>,
+// ) {
+//     let mut cpu_interval = interval(Duration::from_millis(1500));
+//     let mut fan_interval = interval(Duration::from_millis(1500));
+//     let mut temp_interval = interval(Duration::from_millis(1500));
 
-    // Fonction pour déterminer la couleur de la barre de progression
-    fn get_color(value: f32) -> [f32; 4] {
-        if value <= MAX / 2.0 {
-            [0.0, 1.0, 0.0, 1.0] // Vert
-        } else if value > MAX / 2.0 && value <= MAX * 2.0 / 3.0 {
-            [1.0, 1.0, 0.0, 1.0] // Jaune
-        } else {
-            [1.0, 0.0, 0.0, 1.0] // Rouge
-        }
-    }
+//     loop {
+//         tokio::select! {
+//             _ = cpu_interval.tick() => {
+//                 let cpu_usage = graph::Cpu::get_cpu_usage();
+//                 cpu_graph.lock().unwrap().update(cpu_usage);
+//             },
+//             _ = fan_interval.tick() => {
+//                 let fan_info = graph::Cpu::get_all_fan_info().unwrap_or_default();
+//                 for fan in fan_info {
+//                     fan_graph.lock().unwrap().update(fan.rpm.unwrap_or(0) as f32);
+//                 }
+//             },
+//             _ = temp_interval.tick() => {
+//                 let temp = graph::Cpu::get_cpu_temperatures();
+//                 temp_graph.lock().unwrap().update(temp);
+//             },
+//         }
+//     }
+// }
 
-    ui.text("\n");
-    if ui.button("Network-Receiver") {
-        *show_rx_bar = !*show_rx_bar;
-        *show_tx_bar = false;
-    }
+// Fonction pour ajuster dynamiquement les intervalles en fonction de la valeur de FPS
+fn adjust_intervals(
+    cpu_graph: Arc<Mutex<graph::GraphData>>,
+    fan_graph: Arc<Mutex<graph::GraphData>>,
+    temp_graph: Arc<Mutex<graph::GraphData>>,
+) {
+    let fps_cpu = cpu_graph.lock().unwrap().fps;
+    let fps_fan = fan_graph.lock().unwrap().fps;
+    let fps_temp = temp_graph.lock().unwrap().fps;
 
-    ui.same_line_with_pos(150.0); // Alignez le bouton suivant sur la même ligne
-    if ui.button("Network-Transmitter") {
-        *show_tx_bar = !*show_tx_bar;
-        *show_rx_bar = false;
-    }
-
-    ui.separator();
-    
-    if *show_rx_bar {
-        for stat in &stats.interfaces {
-            let rx: f32 = stat.total_received as f32 / MAX;
-            let _color = get_color(stat.total_received as f32);
-            ui.text(&stat.name);
-            ProgressBar::new(rx)
-                .size([300.0, 24.0])
-                .overlay_text(format!("{}",
-                    convert_bytes_to_any(stat.total_received)
-                ))
-                .build(&ui);
-            let label = format!(" {}", convert_bytes_to_any(MAX as u64));
-            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
-            ui.text(&label);
-            ui.text("\n");
-        }
-    }
-
-    if *show_tx_bar {
-        for stat in &stats.interfaces {
-            let tx = stat.total_transmitted as f32 / MAX;
-            ui.text(&stat.name);
-            ProgressBar::new(tx)
-                .size([300.0, 24.0])
-                .overlay_text(format!("{}",
-                    convert_bytes_to_any(stat.total_transmitted)
-                ))
-                .build(&ui);
-            let label = format!(" {}", convert_bytes_to_any(MAX as u64));
-            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
-            ui.text(&label);
-            ui.text("\n");
-        }
-    }
+    cpu_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_cpu);
+    fan_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_fan);
+    temp_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_temp);
 }
-*/
-
-fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
-    const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
-
-    fn get_color(value: f32) -> [f32; 4] {
-        if value <= MAX / 2.0 {
-            [0.0, 1.0, 0.0, 1.0] // Vert
-        } else if value > MAX / 2.0 && value <= MAX * 2.0 / 3.0 {
-            [1.0, 1.0, 0.0, 1.0] // Jaune
-        } else {
-            [1.0, 0.0, 0.0, 1.0] // Rouge
-        }
-    }
-
-    ui.text("\n");
-    if ui.button("Network-Receiver") {
-        *show_rx_bar = !*show_rx_bar;
-        *show_tx_bar = false;
-    }
-
-    ui.same_line_with_pos(150.0); // Alignez le bouton suivant sur la même ligne
-    if ui.button("Network-Transmitter") {
-        *show_tx_bar = !*show_tx_bar;
-        *show_rx_bar = false;
-    }
-
-    ui.separator();
-
-    if *show_rx_bar {
-        for stat in &stats.interfaces {
-            let rx = stat.total_received as f32 / MAX;
-            let color = get_color(stat.total_received as f32);
-            let (r,g,b) = (color[0] , color[1] , color[2]);
-            ui.text(&stat.name);
-
-            // Dessiner la barre de progression
-            let draw_list = ui.get_window_draw_list();
-            let pos = ui.cursor_screen_pos();
-            let size = [300.0, 24.0];
-            let mut fill_end = pos[0] + size[0] * rx;
-
-            // Dessiner la barre de fond (blanche)
-            draw_list.add_rect(
-                pos,
-                [pos[0] + size[0], pos[1] + size[1]],
-                ImColor32::WHITE,
-            ).build();
-
-            // Dessiner la barre remplie
-            if fill_end > size[0] {
-                fill_end = pos[0] + size[0];
-            }
-            if rx > 0.0 {
-                draw_list.add_rect(
-                    pos,
-                    [fill_end, pos[1] + size[1]],
-                    ImColor32::from_rgb_f32s(r, g, b),
-                ).build();
-            }
-            ui.invisible_button("progress_bar", size);
-
-            let label = format!("{}",
-                convert_bytes_to_any(MAX as u64)
-            );
-            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
-            ui.text(&label);
-            ui.text("\n");
-        }
-    }
-
-    if *show_tx_bar {
-        for stat in &stats.interfaces {
-            let tx = stat.total_transmitted as f32 / MAX;
-            let color = get_color(stat.total_transmitted as f32);
-            let (r,g,b) = (color[0] , color[1] , color[2]);
-            ui.text(&stat.name);
-
-            // Dessiner la barre de progression
-            let draw_list = ui.get_window_draw_list();
-            let pos = ui.cursor_screen_pos();
-            let size = [300.0, 24.0];
-            let fill_end = pos[0] + size[0] * tx;
-
-            // Dessiner la barre de fond (blanche)
-            draw_list.add_rect(
-                pos,
-                [pos[0] + size[0], pos[1] + size[1]],
-                ImColor32::WHITE,
-            ).build();
-
-            // Dessiner la barre remplie
-            if tx > 0.0 {
-                draw_list.add_rect(
-                    pos,
-                    [fill_end, pos[1] + size[1]],
-                    ImColor32::from_rgb_f32s(r, g, b),
-                ).build();
-            }
-
-            ui.invisible_button("progress_bar", size);
-
-            let label = format!("{}",
-                convert_bytes_to_any(MAX as u64)
-            );
-            ui.same_line_with_spacing(0.0, 10.0); // Pour afficher à droite de la barre
-            ui.text(&label);
-            ui.text("\n");
-        }
-    }
-}
-
