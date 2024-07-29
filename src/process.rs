@@ -231,6 +231,5 @@ pub mod process {
             ui.next_column();
             ui.separator();
         }
-        // ui.columns(0, "", true);
     }
 }
