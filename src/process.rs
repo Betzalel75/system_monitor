@@ -138,18 +138,15 @@ pub mod process {
         // Obtenez les informations des processus
         let processes = get_process_info();
 
-        let draw_list: imgui::DrawListMut = ui.get_window_draw_list();
-
         // Afficher le champ de filtre
         let mut search_buffer = String::new();
-        let mut selectables: Vec<bool> = vec![false; processes.len()];
 
         ui.text("Process Informations:");
         ui.text(format!("Total Processes: {}", processes.len()));
         ui.input_text("Search", &mut search_buffer).build();
 
         // Afficher le tableau
-        ui.columns(6, "ProcessColumns", true);
+        ui.columns(5, "ProcessColumns", true);
         ui.text("PID");
         ui.next_column();
         ui.text("Name");
@@ -168,60 +165,23 @@ pub mod process {
             .filter(|p| p.name.contains(&search_buffer))
             .collect();
 
-        for (i, process) in filtered_processes.iter().enumerate() {
-            let selectable = selectables[i];
-
-            let process_name = &process.name;
-            let sz_el = [
-                ui.content_region_avail()[0],
-                ui.text_line_height_with_spacing() * filtered_processes.len() as f32,
-            ];
-            ui.selectable(process_name);
-
-            selectables[i] = selectable;
-
-            draw_list.channels_split(2, |channels| {
-                if selected_pids.contains(&process.pid) {
-                    channels.set_current(1);
-                    // ... Draw channel 1
-                    draw_list
-                        .add_rect(
-                            ui.cursor_screen_pos(),
-                            [
-                                ui.cursor_screen_pos()[0] + sz_el[0],
-                                ui.cursor_screen_pos()[1] + ui.text_line_height_with_spacing(),
-                            ],
-                            imgui::ImColor32::from_rgb(0, 128, 255),
-                        )
-                        .build();
-                } else {
-                    channels.set_current(0);
-                    // ... Draw channel 0
-                    draw_list
-                        .add_rect(
-                            ui.cursor_screen_pos(),
-                            [
-                                ui.cursor_screen_pos()[0] + sz_el[0],
-                                ui.cursor_screen_pos()[1] + ui.text_line_height_with_spacing(),
-                            ],
-                            imgui::ImColor32::from_rgb(0, 0, 0),
-                        )
-                        .build();
-                }
-            });
-
-            if selectable {
-                if selected_pids.contains(&process.pid) {
+        for process in filtered_processes {
+            ui.text(format!("{}", process.pid));
+            ui.next_column();
+            let is_selected = selected_pids.contains(&process.pid);
+                        
+            if ui
+                .selectable_config(&process.name)
+                .selected(is_selected)
+                .build()
+            {
+                if is_selected {
                     selected_pids.remove(&process.pid);
                 } else {
                     selected_pids.insert(process.pid);
                 }
             }
 
-            ui.next_column();
-            ui.text(format!("{}", process.pid));
-            ui.next_column();
-            ui.text(&process.name);
             ui.next_column();
             ui.text(&process.state);
             ui.next_column();
@@ -231,5 +191,6 @@ pub mod process {
             ui.next_column();
             ui.separator();
         }
+        ui.columns(1, "", false); // Reset columns
     }
 }

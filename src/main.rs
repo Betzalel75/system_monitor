@@ -7,7 +7,6 @@ extern crate sdl2;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-// use tokio::time::interval;
 
 use graphs::graph;
 use imgui::*;
@@ -81,21 +80,10 @@ async fn main() {
                 let mut sys = system_clone.lock().unwrap();
                 sys.refresh_processes();
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });
-
-    // Lancer les mises à jour des graphiques dans une tâche asynchrone
-    // tokio::spawn(start_updating_graphs(
-    //     cpu_graph.clone(),
-    //     fan_graph.clone(),
-    //     temp_graph.clone(),
-    // ));
-
-    // tokio::spawn(update_cpu_graph(cpu_graph.clone()));
-    // tokio::spawn(update_fan_graph(fan_graph.clone()));
-    // tokio::spawn(update_temperature_graph(temp_graph.clone()));
-
+    let computer = Computer::new();
     let mut network = Network::new();
     network.initialize();
     let mut show_ip = false;
@@ -123,7 +111,7 @@ async fn main() {
         platform.prepare_frame(imgui.io_mut(), &window, &event_pump.mouse_state());
         let ui = imgui.frame();
 
-        ui.window("== Mémoire et processus ==")
+        ui.window("== Memory and Processes ==")
             .size([620.0, 370.0], Condition::FirstUseEver)
             .position([650.0, 10.0], Condition::FirstUseEver)
             .build(|| {
@@ -136,7 +124,6 @@ async fn main() {
                     "Total RAM: {}",
                     convert_bytes_to_any(memory.ram.total_ram)
                 ));
-                // ui.text(format!("Used RAM: {}", convert_bytes_to_any(memory.ram.used_ram)));
                 let free_memory = (memory.ram.used_ram) as f32 / memory.ram.total_ram as f32;
                 ProgressBar::new(free_memory)
                     .size([300.0, 24.0])
@@ -149,7 +136,6 @@ async fn main() {
                     "Total Swap: {}",
                     convert_bytes_to_any(memory.swap.total_swap)
                 ));
-                // ui.text(format!("Used Swap: {}", convert_bytes_to_any(memory.swap.used_swap)));
                 let free_swap = (memory.swap.used_swap) as f32 / memory.swap.total_swap as f32;
                 ProgressBar::new(free_swap)
                     .size([300.0, 24.0])
@@ -162,7 +148,6 @@ async fn main() {
                     "Total Storage: {}",
                     convert_bytes_to_any(memory.storage.total_disk)
                 ));
-                // ui.text(format!("Used Storage: {}", convert_bytes_to_any(memory.storage.used_disk)));
                 let free_storage =
                     (memory.storage.used_disk) as f32 / memory.storage.total_disk as f32;
                 ProgressBar::new(free_storage)
@@ -181,25 +166,16 @@ async fn main() {
                 draw_process_table(ui, &mut system, &mut selected_pids);
             });
 
-        ui.window("== Système ==")
+        ui.window("== System ==")
             .size([600.0, 370.0], Condition::FirstUseEver)
             .position([10.0, 10.0], Condition::FirstUseEver)
             .build(|| {
                 // Code pour la fenêtre Système
-                let computer = Computer::new();
-                // Affichage des informations dans la fenêtre
-                ui.text("System Information:");
-                ui.text(format!("Computer Name: {}", computer.hostname));
-                ui.text(format!("User Name: {}", computer.username));
-                ui.text(format!("OS Info: {}", computer.os_info));
-                ui.text(format!("CPU Info: {}", computer.cpu_info));
-                ui.text(format!("CPU Core Count: {}", computer.cpu_core_count));
-                ui.text("\n");
+                computer.display(ui);
                 ui.window("Graphics")
                     .size([600.0, 240.0], Condition::FirstUseEver)
                     .position([10.0, 140.0], Condition::FirstUseEver)
                     .build(|| {
-                        // Code pour la fenêtre Graphics
                         // Appeler adjust_intervals chaque fois que le FPS est modifié
                         adjust_intervals(cpu_graph.clone(), fan_graph.clone(), temp_graph.clone());
 
@@ -272,7 +248,7 @@ async fn main() {
                     });
             });
 
-        ui.window("== Réseau ==")
+        ui.window("== Network ==")
             .size([1260.0, 310.0], Condition::FirstUseEver)
             .position([10.0, 390.0], Condition::FirstUseEver)
             .build(|| {
@@ -282,122 +258,12 @@ async fn main() {
                 }
                 if show_ip {
                     ui.separator();
-                    ui.columns(2, "IP-Address", true);
-                    ui.text("Interface");
-                    ui.next_column();
-                    ui.text("IP");
-                    ui.next_column();
-                    ui.separator();
-                    for interface in &network.interfaces {
-                        ui.text(format!("{}", interface.name));
-                        ui.next_column();
-                        ui.text(format!("{}", interface.ip));
-                        ui.next_column();
-                        ui.separator();
-                    }
-                    ui.columns(1, "", true);
+                   draw_ip_table(ui, &network);
                 }
                 ui.text("\n");
                 if let Some(tab_bar) = ui.tab_bar("Network") {
-                    if let Some(rx_tab) = ui.tab_item("RX") {
-                        // En-têtes du tableau RX
-                        ui.separator();
-                        ui.columns(9, "RXColumns", true);
-                        ui.text("Interface");
-                        ui.next_column();
-                        ui.text("Bytes");
-                        ui.next_column();
-                        ui.text("Packets");
-                        ui.next_column();
-                        ui.text("Errs");
-                        ui.next_column();
-                        ui.text("Drop");
-                        ui.next_column();
-                        ui.text("Fifo");
-                        ui.next_column();
-                        ui.text("Frame");
-                        ui.next_column();
-                        ui.text("Compressed");
-                        ui.next_column();
-                        ui.text("Multicast");
-                        ui.next_column();
-                        ui.separator();
-                        for interface in &network.interfaces {
-                            if let Some(rx_stats) = &interface.rx_stats {
-                                ui.text(format!("{}", interface.name));
-                                ui.next_column();
-                                ui.text(format!("{}", interface.total_received));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.packets));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.errs));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.drop));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.fifo));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.frame));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.compressed));
-                                ui.next_column();
-                                ui.text(format!("{}", rx_stats.multicast));
-                                ui.next_column();
-                                ui.separator();
-                            }
-                        }
-                        ui.columns(1, "", true);
-                        rx_tab.end();
-                    }
-
-                    if let Some(tx_tab) = ui.tab_item("TX") {
-                        // En-têtes du tableau TX
-                        ui.separator();
-                        ui.columns(9, "TXColumns", true);
-                        ui.text("Interface");
-                        ui.next_column();
-                        ui.text("Bytes");
-                        ui.next_column();
-                        ui.text("Packets");
-                        ui.next_column();
-                        ui.text("Errs");
-                        ui.next_column();
-                        ui.text("Drop");
-                        ui.next_column();
-                        ui.text("Fifo");
-                        ui.next_column();
-                        ui.text("Colls");
-                        ui.next_column();
-                        ui.text("Compressed");
-                        ui.next_column();
-                        ui.text("Carrier");
-                        ui.next_column();
-                        ui.separator();
-                        for interface in &network.interfaces {
-                            if let Some(tx_stats) = &interface.tx_stats {
-                                ui.text(format!("{}", interface.name));
-                                ui.next_column();
-                                ui.text(format!("{}", interface.total_transmitted));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.packets));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.errs));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.drop));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.fifo));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.colls));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.carrier));
-                                ui.next_column();
-                                ui.text(format!("{}", tx_stats.compressed));
-                                ui.next_column();
-                                ui.separator();
-                            }
-                        }
-                        ui.columns(1, "", true);
-                        tx_tab.end();
-                    }
+                    draw_rx_table(ui, &network);
+                    draw_tx_table(ui, &network);
                     tab_bar.end();
                 }
                 // Barres de Progressions
@@ -420,47 +286,3 @@ async fn main() {
     }
 }
 
-// Fonction pour lancer les mises à jour asynchrones
-// async fn start_updating_graphs(
-//     cpu_graph: Arc<Mutex<graph::GraphData>>,
-//     fan_graph: Arc<Mutex<graph::GraphData>>,
-//     temp_graph: Arc<Mutex<graph::GraphData>>,
-// ) {
-//     let mut cpu_interval = interval(Duration::from_millis(1500));
-//     let mut fan_interval = interval(Duration::from_millis(1500));
-//     let mut temp_interval = interval(Duration::from_millis(1500));
-
-//     loop {
-//         tokio::select! {
-//             _ = cpu_interval.tick() => {
-//                 let cpu_usage = graph::Cpu::get_cpu_usage();
-//                 cpu_graph.lock().unwrap().update(cpu_usage);
-//             },
-//             _ = fan_interval.tick() => {
-//                 let fan_info = graph::Cpu::get_all_fan_info().unwrap_or_default();
-//                 for fan in fan_info {
-//                     fan_graph.lock().unwrap().update(fan.rpm.unwrap_or(0) as f32);
-//                 }
-//             },
-//             _ = temp_interval.tick() => {
-//                 let temp = graph::Cpu::get_cpu_temperatures();
-//                 temp_graph.lock().unwrap().update(temp);
-//             },
-//         }
-//     }
-// }
-
-// Fonction pour ajuster dynamiquement les intervalles en fonction de la valeur de FPS
-fn adjust_intervals(
-    cpu_graph: Arc<Mutex<graph::GraphData>>,
-    fan_graph: Arc<Mutex<graph::GraphData>>,
-    temp_graph: Arc<Mutex<graph::GraphData>>,
-) {
-    let fps_cpu = cpu_graph.lock().unwrap().fps;
-    let fps_fan = fan_graph.lock().unwrap().fps;
-    let fps_temp = temp_graph.lock().unwrap().fps;
-
-    cpu_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_cpu);
-    fan_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_fan);
-    temp_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_temp);
-}

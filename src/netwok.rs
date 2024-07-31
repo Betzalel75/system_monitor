@@ -132,6 +132,127 @@ pub mod network {
         }
     }
 
+    pub fn draw_ip_table(ui: &Ui, network: &Network) {
+        ui.columns(2, "IP-Address", true);
+        ui.text("Interface");
+        ui.next_column();
+        ui.text("IP");
+        ui.next_column();
+        ui.separator();
+        for interface in &network.interfaces {
+            ui.text(format!("{}", interface.name));
+            ui.next_column();
+            ui.text(format!("{}", interface.ip));
+            ui.next_column();
+            ui.separator();
+        }
+        ui.columns(1, "", false);
+    }
+
+    pub fn draw_rx_table(ui: &Ui, network: &Network) {
+        if let Some(rx_tab) = ui.tab_item("RX") {
+            // En-têtes du tableau RX
+            ui.separator();
+            ui.columns(9, "RXColumns", true);
+            ui.text("Interface");
+            ui.next_column();
+            ui.text("Bytes");
+            ui.next_column();
+            ui.text("Packets");
+            ui.next_column();
+            ui.text("Errs");
+            ui.next_column();
+            ui.text("Drop");
+            ui.next_column();
+            ui.text("Fifo");
+            ui.next_column();
+            ui.text("Frame");
+            ui.next_column();
+            ui.text("Compressed");
+            ui.next_column();
+            ui.text("Multicast");
+            ui.next_column();
+            ui.separator();
+            for interface in &network.interfaces {
+                if let Some(rx_stats) = &interface.rx_stats {
+                    ui.text(format!("{}", interface.name));
+                    ui.next_column();
+                    ui.text(format!("{}", interface.total_received));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.packets));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.errs));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.drop));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.fifo));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.frame));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.compressed));
+                    ui.next_column();
+                    ui.text(format!("{}", rx_stats.multicast));
+                    ui.next_column();
+                    ui.separator();
+                }
+            }
+            ui.columns(1, "", false);
+            rx_tab.end();
+        }
+    }
+
+    pub fn draw_tx_table(ui: &Ui, network: &Network) {
+        if let Some(tx_tab) = ui.tab_item("TX") {
+            // En-têtes du tableau TX
+            ui.separator();
+            ui.columns(9, "TXColumns", true);
+            ui.text("Interface");
+            ui.next_column();
+            ui.text("Bytes");
+            ui.next_column();
+            ui.text("Packets");
+            ui.next_column();
+            ui.text("Errs");
+            ui.next_column();
+            ui.text("Drop");
+            ui.next_column();
+            ui.text("Fifo");
+            ui.next_column();
+            ui.text("Colls");
+            ui.next_column();
+            ui.text("Compressed");
+            ui.next_column();
+            ui.text("Carrier");
+            ui.next_column();
+            ui.separator();
+            for interface in &network.interfaces {
+                if let Some(tx_stats) = &interface.tx_stats {
+                    ui.text(format!("{}", interface.name));
+                    ui.next_column();
+                    ui.text(format!("{}", interface.total_transmitted));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.packets));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.errs));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.drop));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.fifo));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.colls));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.carrier));
+                    ui.next_column();
+                    ui.text(format!("{}", tx_stats.compressed));
+                    ui.next_column();
+                    ui.separator();
+                }
+            }
+            ui.columns(1, "", false);
+            tx_tab.end();
+        }
+    }
+
     pub fn network_prog(ui: &Ui, show_rx_bar: &mut bool, show_tx_bar: &mut bool, stats: &Network) {
         const MAX: f32 = 1024.0 * 1024.0 * 1024.0 * 2.0; // 2GB en bytes
 

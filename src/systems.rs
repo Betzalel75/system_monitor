@@ -1,6 +1,6 @@
 pub mod system {
     use std::{fs::File, io::{BufRead, BufReader}};
-
+    use imgui::Ui;
     use sysinfo::System;
     use users::{get_current_uid, get_user_by_uid};
 
@@ -43,6 +43,16 @@ pub mod system {
                 Some(user) => user.name().to_str().unwrap().to_string(),
                 None => "N/A".to_string(),
             }
+        }
+        pub fn display(&self,ui: &Ui){
+            // Affichage des informations dans la fenêtre
+            ui.text("System Information:");
+            ui.text(format!("Computer Name: {}", self.hostname));
+            ui.text(format!("User Name: {}", self.username));
+            ui.text(format!("OS Info: {}", self.os_info));
+            ui.text(format!("CPU Info: {}", self.cpu_info));
+            ui.text(format!("CPU Core Count: {}", self.cpu_core_count));
+            ui.text("\n");
         }
     }
     fn get_os_info() -> String {

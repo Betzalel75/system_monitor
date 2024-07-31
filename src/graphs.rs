@@ -205,4 +205,19 @@ pub mod graph {
             }
         }
     }
+
+    // Fonction pour ajuster dynamiquement les intervalles en fonction de la valeur de FPS
+    pub fn adjust_intervals(
+        cpu_graph: Arc<Mutex<GraphData>>,
+        fan_graph: Arc<Mutex<GraphData>>,
+        temp_graph: Arc<Mutex<GraphData>>,
+    ) {
+        let fps_cpu = cpu_graph.lock().unwrap().fps;
+        let fps_fan = fan_graph.lock().unwrap().fps;
+        let fps_temp = temp_graph.lock().unwrap().fps;
+
+        cpu_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_cpu);
+        fan_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_fan);
+        temp_graph.lock().unwrap().update_interval = Duration::from_secs_f32(1.0 / fps_temp);
+    }
 }
